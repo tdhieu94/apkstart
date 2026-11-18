@@ -605,8 +605,10 @@ class EmulatorEngine {
     // resources/runtime）时 root/avd 不存在也不可写，AVD 要落到用户数据目录。
     const avdHome = doctor.shortPath(this.provisioner.paths().avdHome);
     const adbPort = String(plan.adbPort || process.env.ANDROID_ADB_SERVER_PORT || '5044');
+    const pathKey = Object.keys(process.env).find((k) => k.toUpperCase() === 'PATH') || 'PATH';
     return {
       ...process.env,
+      [pathKey]: [path.join(safeRoot, 'platform-tools'), process.env[pathKey] || ''].join(path.delimiter),
       ANDROID_SDK_ROOT: safeRoot,
       ANDROID_HOME: safeRoot,
       ANDROID_AVD_HOME: avdHome,
