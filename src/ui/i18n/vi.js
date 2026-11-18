@@ -1275,6 +1275,8 @@
     '所在磁盘剩余 {0} GB': 'ổ đĩa còn trống {0} GB',
     '正在挑选最快的下载源': 'Đang chọn nguồn tải nhanh nhất',
     '独立窗口已启用': 'đã bật cửa sổ riêng',
+    '诊断报告': 'Báo cáo chẩn đoán',
+    '已尝试': 'Đã thử',
     '快速启动差量盘': 'Đĩa vi sai khởi động nhanh',
     '实际容量以运行时 /data 为准': 'dung lượng thật theo /data của runtime',
     '驱动 {0} 个': '{0} driver',
