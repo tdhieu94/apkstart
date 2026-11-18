@@ -924,8 +924,12 @@ class EmulatorEngine {
   }
 
   async _resetAdbServer(adbPort) {
-    let adb = 'adb';
-    try { adb = this.provisioner.adbVersionPath() || 'adb'; } catch (_) { /* 用 PATH 里的 */ }
+    let adb = '';
+    try { adb = this.provisioner.adbVersionPath(); } catch (_) { adb = ''; }
+    if (!adb) {
+      try { adb = path.join(this.locate().root, 'platform-tools', 'adb.exe'); } catch (_) { adb = ''; }
+    }
+    if (!adb || !fs.existsSync(adb)) adb = 'adb';
     const env = { ...process.env, ANDROID_ADB_SERVER_PORT: String(adbPort) };
     const run = (args, timeout) => new Promise((resolve) => {
       try {
