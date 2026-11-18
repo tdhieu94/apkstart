@@ -399,6 +399,7 @@
             <option value="en-US">English（镜像原生）</option>
             <option value="ja-JP">日本語</option>
             <option value="ko-KR">한국어</option>
+            <option value="vi-VN">Tiếng Việt</option>
           </select>
           <span class="sub">系统设置、权限弹窗、日期格式的语言。开机时注入到虚拟机，
             <b>下次重启运行时生效</b>。中文输入法不受此项影响，单独在下面开关。</span>
@@ -733,6 +734,15 @@
 
       <div class="group">
         <div class="group-title">系统集成</div>
+        <div class="field">
+          <label>界面语言</label>
+          <select id="setUiLanguage">
+            <option value="">跟随系统</option>
+            <option value="vi">Tiếng Việt</option>
+            <option value="zh">中文</option>
+          </select>
+          <span class="sub">ApkStart 自己界面的语言，切换后立即刷新。安卓系统内的语言在上面的「系统语言」里设置。</span>
+        </div>
         <div class="field switch-field">
           <div>
             <label>关联 .apk 文件</label>
@@ -820,6 +830,9 @@
   </div>
 </div>
 
+<script src="i18n/vi.js"></script>
+<script src="i18n/index.js"></script>
+<script src="i18n/dom.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

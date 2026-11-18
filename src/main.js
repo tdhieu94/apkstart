@@ -48,6 +48,7 @@ const { NotifyBridge } = require('./core/notify');
 const { AndroidSettings } = require('./core/android');
 const { Updater, findUninstaller } = require('./core/updater');
 const leftovers = require('./core/leftovers');
+const i18n = require('./ui/i18n');
 
 // Windows 下窗口被遮挡时 capturePage 会拿到旧帧，自动化截图需要禁用遮挡计算
 app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
@@ -773,11 +774,43 @@ function showWindow() {
   mainWindow.focus();
 }
 
+function uiLang() {
+  return i18n.resolve(store.getSettings().uiLanguage, app.getLocale());
+}
+
+function tr(s) {
+  return i18n.tr(s, uiLang());
+}
+
+function trOpts(opts) {
+  if (!opts || typeof opts !== 'object') return opts;
+  const o = { ...opts };
+  for (const k of ['title', 'message', 'detail', 'buttonLabel', 'checkboxLabel']) if (o[k]) o[k] = tr(o[k]);
+  if (Array.isArray(o.buttons)) o.buttons = o.buttons.map(tr);
+  if (Array.isArray(o.filters)) o.filters = o.filters.map((f) => ({ ...f, name: tr(f.name) }));
+  return o;
+}
+
+function trMenu(items) {
+  return items.map((it) => ({
+    ...it,
+    ...(it.label ? { label: tr(it.label) } : {}),
+    ...(Array.isArray(it.submenu) ? { submenu: trMenu(it.submenu) } : {}),
+  }));
+}
+
+for (const fn of ['showMessageBox', 'showOpenDialog', 'showSaveDialog']) {
+  const orig = dialog[fn].bind(dialog);
+  dialog[fn] = (win, opts) => (opts === undefined ? orig(trOpts(win)) : orig(win, trOpts(opts)));
+}
+
+ipcMain.on('app:uiLang', (e) => { e.returnValue = uiLang(); });
+
 function notify(title, body) {
   if (store.getSettings().notifyOnInstall === false) return;
   try {
     const { Notification } = require('electron');
-    if (Notification.isSupported()) new Notification({ title, body, icon: nativeImage.createFromBuffer(ICON_PNG) }).show();
+    if (Notification.isSupported()) new Notification({ title: tr(title), body: tr(body), icon: nativeImage.createFromBuffer(ICON_PNG) }).show();
   } catch (_) { /* ignore */ }
 }
 
@@ -807,7 +840,7 @@ function buildTray() {
     const runningLabel = currentAppPkg
       ? ((store.getApp(currentAppPkg) || {}).label || currentAppPkg)
       : '';
-    const menu = Menu.buildFromTemplate([
+    const menu = Menu.buildFromTemplate(trMenu([
       { label: '打开 ApkStart', click: () => showWindow() },
       { type: 'separator' },
       ...(apps.length
@@ -868,10 +901,10 @@ function buildTray() {
           app.quit();
         },
       },
-    ]);
+    ]));
     tray.setContextMenu(menu);
+    tray.setToolTip(tr('ApkStart — 安卓应用运行器'));
   };
-  tray.setToolTip('ApkStart — 安卓应用运行器');
   // Windows 托盘的惯例是单击就打开主窗口（双击当然也可以）。
   // 之前只绑了 double-click，用户单击没反应，会以为托盘图标坏了。
   // 右键才出菜单，所以这里单击直接 showWindow 不会和菜单冲突。

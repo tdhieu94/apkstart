@@ -152,6 +152,7 @@ const DEFAULT_SETTINGS = {
   freeform: false,           // 共享一个运行时窗口，不再用 Android freeform 小窗
   hideAfterLaunch: false,    // 主进程必须常驻，否则一退出就把 Android 运行时杀掉了
   notifyOnInstall: true,
+  uiLanguage: '',
   autoStart: true,           // 开机自启，默认开启，用户无需设置
   autoDeploy: true,          // 首次运行自动完成全部部署，不再分 1~5 步
   // 启动欢迎卡：lastDate 记录上次自动弹出的日期（手动打开时一天最多一次），
