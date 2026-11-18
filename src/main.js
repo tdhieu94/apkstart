@@ -48,6 +48,8 @@ const { NotifyBridge } = require('./core/notify');
 const { AndroidSettings } = require('./core/android');
 const { Updater, findUninstaller } = require('./core/updater');
 const leftovers = require('./core/leftovers');
+const i18n = require('./ui/i18n');
+const { ScrcpyWindows } = require('./core/scrcpy');
 
 // Windows 下窗口被遮挡时 capturePage 会拿到旧帧，自动化截图需要禁用遮挡计算
 app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
@@ -221,6 +223,7 @@ let sharer = null;
 let quitting = false;
 let winAgent = null;
 let appWin = null;
+const scrcpyWins = new ScrcpyWindows({ log: (m) => appLog(m) });
 let notifier = null;
 let androidSet = null;
 let updater = null;
@@ -773,11 +776,43 @@ function showWindow() {
   mainWindow.focus();
 }
 
+function uiLang() {
+  return i18n.resolve(store.getSettings().uiLanguage, app.getLocale());
+}
+
+function tr(s) {
+  return i18n.tr(s, uiLang());
+}
+
+function trOpts(opts) {
+  if (!opts || typeof opts !== 'object') return opts;
+  const o = { ...opts };
+  for (const k of ['title', 'message', 'detail', 'buttonLabel', 'checkboxLabel']) if (o[k]) o[k] = tr(o[k]);
+  if (Array.isArray(o.buttons)) o.buttons = o.buttons.map(tr);
+  if (Array.isArray(o.filters)) o.filters = o.filters.map((f) => ({ ...f, name: tr(f.name) }));
+  return o;
+}
+
+function trMenu(items) {
+  return items.map((it) => ({
+    ...it,
+    ...(it.label ? { label: tr(it.label) } : {}),
+    ...(Array.isArray(it.submenu) ? { submenu: trMenu(it.submenu) } : {}),
+  }));
+}
+
+for (const fn of ['showMessageBox', 'showOpenDialog', 'showSaveDialog']) {
+  const orig = dialog[fn].bind(dialog);
+  dialog[fn] = (win, opts) => (opts === undefined ? orig(trOpts(win)) : orig(win, trOpts(opts)));
+}
+
+ipcMain.on('app:uiLang', (e) => { e.returnValue = uiLang(); });
+
 function notify(title, body) {
   if (store.getSettings().notifyOnInstall === false) return;
   try {
     const { Notification } = require('electron');
-    if (Notification.isSupported()) new Notification({ title, body, icon: nativeImage.createFromBuffer(ICON_PNG) }).show();
+    if (Notification.isSupported()) new Notification({ title: tr(title), body: tr(body), icon: nativeImage.createFromBuffer(ICON_PNG) }).show();
   } catch (_) { /* ignore */ }
 }
 
@@ -807,7 +842,7 @@ function buildTray() {
     const runningLabel = currentAppPkg
       ? ((store.getApp(currentAppPkg) || {}).label || currentAppPkg)
       : '';
-    const menu = Menu.buildFromTemplate([
+    const menu = Menu.buildFromTemplate(trMenu([
       { label: '打开 ApkStart', click: () => showWindow() },
       { type: 'separator' },
       ...(apps.length
@@ -868,10 +903,10 @@ function buildTray() {
           app.quit();
         },
       },
-    ]);
+    ]));
     tray.setContextMenu(menu);
+    tray.setToolTip(tr('ApkStart — 安卓应用运行器'));
   };
-  tray.setToolTip('ApkStart — 安卓应用运行器');
   // Windows 托盘的惯例是单击就打开主窗口（双击当然也可以）。
   // 之前只绑了 double-click，用户单击没反应，会以为托盘图标坏了。
   // 右键才出菜单，所以这里单击直接 showWindow 不会和菜单冲突。
@@ -996,6 +1031,7 @@ async function runLaunch(pkg) {
 }
 
 async function launchOne(pkg) {
+  if (displaySettings().scrcpyWindows) return launchScrcpy(pkg);
   const t0 = Date.now();
   const mark = (s) => appLog(`launch ${pkg} ${s} +${Date.now() - t0}ms`);
   // 「提前接画面」的状态：进程一出现就接，但最终成败要等回调回来才知道。
@@ -1153,6 +1189,56 @@ async function launchOne(pkg) {
     // 启动失败也把模拟器窗口继续压住（不要让它以「独立的模拟器窗口」形式露出来），
     // 下次点应用还是走同一条隐藏 → embed 的路径。
     if (winAgent) armAgent(winAgent).catch(() => {});
+    showWindow();
+    send('toast', { type: 'error', message: `启动失败：${e.message}` });
+    return { ok: false, error: e.message };
+  }
+}
+
+async function launchScrcpy(pkg) {
+  const app = store.getApp(pkg);
+  if (!app) return { ok: false, error: '应用不存在' };
+  if (scrcpyWins.isOpen(pkg)) return { ok: true, reused: true };
+  const onLog = (m) => { send('runtime:log', m); appLog(`  rt ${m}`); };
+  appLog(`launch scrcpy ${pkg}`);
+  try {
+    if (winAgent) { try { await armAgent(winAgent); } catch (_) { /* ignore */ } }
+    send('toast', { type: 'info', message: `正在打开 ${app.label}` });
+    const rt = await runtime.ensure({ onLog });
+    if (!rt || !rt.ok) throw new Error((rt && rt.error) || '运行时不可用');
+    if (!(await rt.client.isInstalled(pkg).catch(() => false))) {
+      onLog(`正在恢复已装应用 ${app.label}…`);
+      await rt.client.install(app.apkPath);
+    }
+    const exe = runtime.provisioner.scrcpyExe()
+      || (await runtime.provisioner.installScrcpy((p) => onLog(p.message))).exe;
+    const lcd = (runtime.emulator.profile && runtime.emulator.profile.lcd) || { w: 720, h: 1280, dpi: 320 };
+    scrcpyWins.open({
+      exe,
+      adbPath: runtime.adbPath(),
+      adbPort: runtime.emulator.adbPort,
+      serial: runtime.emuSerial,
+      pkg,
+      title: app.label,
+      landscape: wantLandscapeFor(pkg),
+      width: lcd.w,
+      height: lcd.h,
+      dpi: lcd.dpi,
+      onExit: (code) => {
+        appLog(`scrcpy ${pkg} exit ${code}`);
+        if (scrcpyWins.count === 0) runtime.touch();
+      },
+    });
+    const ok = await scrcpyWins.waitReady(pkg);
+    if (!ok) throw new Error('scrcpy 窗口没能打开');
+    if (mainWindow && mainWindow.isVisible() && !IS_DEV) mainWindow.hide();
+    runtime.touch();
+    send('app:launched', { package: pkg, engine: 'scrcpy' });
+    appLog(`launch ok ${pkg} scrcpy`);
+    return { ok: true, embedded: false };
+  } catch (e) {
+    scrcpyWins.close(pkg);
+    appLog(`launch failed ${pkg}: ${e && (e.stack || e.message)}`);
     showWindow();
     send('toast', { type: 'error', message: `启动失败：${e.message}` });
     return { ok: false, error: e.message };
@@ -2908,6 +2994,7 @@ if (!gotLock) {
       quitReady = true;
       sharer?.stop();
       notifier?.stop();
+      scrcpyWins.closeAll();
       try { appWin?.close({ keepApp: true }); } catch (_) { /* ignore */ }
       const finish = () => {
         try { winAgent?.dispose(); } catch (_) { /* ignore */ }

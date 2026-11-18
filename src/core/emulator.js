@@ -605,8 +605,10 @@ class EmulatorEngine {
     // resources/runtime）时 root/avd 不存在也不可写，AVD 要落到用户数据目录。
     const avdHome = doctor.shortPath(this.provisioner.paths().avdHome);
     const adbPort = String(plan.adbPort || process.env.ANDROID_ADB_SERVER_PORT || '5044');
+    const pathKey = Object.keys(process.env).find((k) => k.toUpperCase() === 'PATH') || 'PATH';
     return {
       ...process.env,
+      [pathKey]: [path.join(safeRoot, 'platform-tools'), process.env[pathKey] || ''].join(path.delimiter),
       ANDROID_SDK_ROOT: safeRoot,
       ANDROID_HOME: safeRoot,
       ANDROID_AVD_HOME: avdHome,
@@ -922,8 +924,12 @@ class EmulatorEngine {
   }
 
   async _resetAdbServer(adbPort) {
-    let adb = 'adb';
-    try { adb = this.provisioner.adbVersionPath() || 'adb'; } catch (_) { /* 用 PATH 里的 */ }
+    let adb = '';
+    try { adb = this.provisioner.adbVersionPath(); } catch (_) { adb = ''; }
+    if (!adb) {
+      try { adb = path.join(this.locate().root, 'platform-tools', 'adb.exe'); } catch (_) { adb = ''; }
+    }
+    if (!adb || !fs.existsSync(adb)) adb = 'adb';
     const env = { ...process.env, ANDROID_ADB_SERVER_PORT: String(adbPort) };
     const run = (args, timeout) => new Promise((resolve) => {
       try {

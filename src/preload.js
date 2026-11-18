@@ -3,6 +3,8 @@ const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 const invoke = (channel, payload) => ipcRenderer.invoke(channel, payload);
 
+contextBridge.exposeInMainWorld('apkstartLang', ipcRenderer.sendSync('app:uiLang'));
+
 contextBridge.exposeInMainWorld('apkstart', {
   info: () => invoke('app:info'),
   listApps: () => invoke('apps:list'),

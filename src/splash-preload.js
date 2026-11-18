@@ -1,6 +1,8 @@
 'use strict';
 const { contextBridge, ipcRenderer } = require('electron');
 
+contextBridge.exposeInMainWorld('apkstartLang', ipcRenderer.sendSync('app:uiLang'));
+
 contextBridge.exposeInMainWorld('apkstartSplash', {
   version: () => ipcRenderer.invoke('splash:version'),
   isFirstRun: () => ipcRenderer.invoke('splash:isFirstRun'),

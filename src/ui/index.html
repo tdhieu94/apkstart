@@ -277,6 +277,7 @@
           <select id="setWindowEmbed">
             <option value="embed">嵌入模式（默认）· 安卓画面嵌在 ApkStart 窗口里，观感统一</option>
             <option value="detached">独立窗口 · 由模拟器自己开窗口，避开花屏/黑边/点不准</option>
+            <option value="scrcpy">scrcpy · 每个应用一块虚拟屏、一个独立窗口，可同时开多个（实验）</option>
           </select>
           <span class="sub">嵌入模式最像「一个应用一个窗口」，但需要把模拟器的窗口塞进我们自己的窗口，
             容易在缩放、旋转、多窗口切换时出现黑边或点击错位。独立模式下方向、缩放、输入都由模拟器原生处理，
@@ -399,6 +400,7 @@
             <option value="en-US">English（镜像原生）</option>
             <option value="ja-JP">日本語</option>
             <option value="ko-KR">한국어</option>
+            <option value="vi-VN">Tiếng Việt</option>
           </select>
           <span class="sub">系统设置、权限弹窗、日期格式的语言。开机时注入到虚拟机，
             <b>下次重启运行时生效</b>。中文输入法不受此项影响，单独在下面开关。</span>
@@ -733,6 +735,15 @@
 
       <div class="group">
         <div class="group-title">系统集成</div>
+        <div class="field">
+          <label>界面语言</label>
+          <select id="setUiLanguage">
+            <option value="">跟随系统</option>
+            <option value="vi">Tiếng Việt</option>
+            <option value="zh">中文</option>
+          </select>
+          <span class="sub">ApkStart 自己界面的语言，切换后立即刷新。安卓系统内的语言在上面的「系统语言」里设置。</span>
+        </div>
         <div class="field switch-field">
           <div>
             <label>关联 .apk 文件</label>
@@ -820,6 +831,9 @@
   </div>
 </div>
 
+<script src="i18n/vi.js"></script>
+<script src="i18n/index.js"></script>
+<script src="i18n/dom.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

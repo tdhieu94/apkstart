@@ -32,6 +32,7 @@ const log = (p) => console.log(`[${p.stage}] ${p.message} ${p.percent != null ? 
   await prov.installAdb(log);
   await prov.installEmulator(log);
   await prov.installPlayImage(log);
+  await prov.installScrcpy(log);
 
   const ok =
     fs.existsSync(path.join(outRoot, 'emulator', 'emulator.exe')) &&
