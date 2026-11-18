@@ -181,6 +181,7 @@ const DEFAULT_SETTINGS = {
     // 窗口模式：true=把安卓画面嵌进 ApkStart 自己的窗口（观感统一）；
     // false=让模拟器开自己的原生窗口（绕开嵌入固有的黑边/坐标错位/铺不满问题）。
     windowEmbed: true,
+    scrcpyWindows: false,
   },
 };
 

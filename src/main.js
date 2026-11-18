@@ -49,6 +49,7 @@ const { AndroidSettings } = require('./core/android');
 const { Updater, findUninstaller } = require('./core/updater');
 const leftovers = require('./core/leftovers');
 const i18n = require('./ui/i18n');
+const { ScrcpyWindows } = require('./core/scrcpy');
 
 // Windows 下窗口被遮挡时 capturePage 会拿到旧帧，自动化截图需要禁用遮挡计算
 app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
@@ -222,6 +223,7 @@ let sharer = null;
 let quitting = false;
 let winAgent = null;
 let appWin = null;
+const scrcpyWins = new ScrcpyWindows({ log: (m) => appLog(m) });
 let notifier = null;
 let androidSet = null;
 let updater = null;
@@ -1029,6 +1031,7 @@ async function runLaunch(pkg) {
 }
 
 async function launchOne(pkg) {
+  if (displaySettings().scrcpyWindows) return launchScrcpy(pkg);
   const t0 = Date.now();
   const mark = (s) => appLog(`launch ${pkg} ${s} +${Date.now() - t0}ms`);
   // 「提前接画面」的状态：进程一出现就接，但最终成败要等回调回来才知道。
@@ -1186,6 +1189,56 @@ async function launchOne(pkg) {
     // 启动失败也把模拟器窗口继续压住（不要让它以「独立的模拟器窗口」形式露出来），
     // 下次点应用还是走同一条隐藏 → embed 的路径。
     if (winAgent) armAgent(winAgent).catch(() => {});
+    showWindow();
+    send('toast', { type: 'error', message: `启动失败：${e.message}` });
+    return { ok: false, error: e.message };
+  }
+}
+
+async function launchScrcpy(pkg) {
+  const app = store.getApp(pkg);
+  if (!app) return { ok: false, error: '应用不存在' };
+  if (scrcpyWins.isOpen(pkg)) return { ok: true, reused: true };
+  const onLog = (m) => { send('runtime:log', m); appLog(`  rt ${m}`); };
+  appLog(`launch scrcpy ${pkg}`);
+  try {
+    if (winAgent) { try { await armAgent(winAgent); } catch (_) { /* ignore */ } }
+    send('toast', { type: 'info', message: `正在打开 ${app.label}` });
+    const rt = await runtime.ensure({ onLog });
+    if (!rt || !rt.ok) throw new Error((rt && rt.error) || '运行时不可用');
+    if (!(await rt.client.isInstalled(pkg).catch(() => false))) {
+      onLog(`正在恢复已装应用 ${app.label}…`);
+      await rt.client.install(app.apkPath);
+    }
+    const exe = runtime.provisioner.scrcpyExe()
+      || (await runtime.provisioner.installScrcpy((p) => onLog(p.message))).exe;
+    const lcd = (runtime.emulator.profile && runtime.emulator.profile.lcd) || { w: 720, h: 1280, dpi: 320 };
+    scrcpyWins.open({
+      exe,
+      adbPath: runtime.adbPath(),
+      adbPort: runtime.emulator.adbPort,
+      serial: runtime.emuSerial,
+      pkg,
+      title: app.label,
+      landscape: wantLandscapeFor(pkg),
+      width: lcd.w,
+      height: lcd.h,
+      dpi: lcd.dpi,
+      onExit: (code) => {
+        appLog(`scrcpy ${pkg} exit ${code}`);
+        if (scrcpyWins.count === 0) runtime.touch();
+      },
+    });
+    const ok = await scrcpyWins.waitReady(pkg);
+    if (!ok) throw new Error('scrcpy 窗口没能打开');
+    if (mainWindow && mainWindow.isVisible() && !IS_DEV) mainWindow.hide();
+    runtime.touch();
+    send('app:launched', { package: pkg, engine: 'scrcpy' });
+    appLog(`launch ok ${pkg} scrcpy`);
+    return { ok: true, embedded: false };
+  } catch (e) {
+    scrcpyWins.close(pkg);
+    appLog(`launch failed ${pkg}: ${e && (e.stack || e.message)}`);
     showWindow();
     send('toast', { type: 'error', message: `启动失败：${e.message}` });
     return { ok: false, error: e.message };
@@ -2941,6 +2994,7 @@ if (!gotLock) {
       quitReady = true;
       sharer?.stop();
       notifier?.stop();
+      scrcpyWins.closeAll();
       try { appWin?.close({ keepApp: true }); } catch (_) { /* ignore */ }
       const finish = () => {
         try { winAgent?.dispose(); } catch (_) { /* ignore */ }

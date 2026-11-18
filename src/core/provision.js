@@ -33,6 +33,10 @@ const SOURCES = {
     'https://dl.google.com/android/repository/sys-img/google_apis/sys-img2-3.xml',
   ],
   aehdFallback: 'https://dl.google.com/android/repository/aehd-windows_v2.2.zip',
+  scrcpy: {
+    url: 'https://github.com/Genymobile/scrcpy/releases/download/v5.0.1/scrcpy-win64-v5.0.1.zip',
+    sha256: 'b12a2c4ee8be317422451fc7dcf8ee20a71b5ea7ef9ad73ddd825a25316227a5',
+  },
   // 兜底：索引不可用时直接用的已知版本
   emulatorFallback: 'https://dl.google.com/android/repository/emulator-windows_x64-16847572.zip',
   sysimgFallback: 'https://dl.google.com/android/repository/sys-img/google_apis_playstore/x86_64-34_r14.zip',
@@ -290,6 +294,7 @@ class Provisioner {
       sysImgDir: path.join(sysRoot, `android-${sysApi}`, sysTag, sysAbi),
       avdHome: insideData ? path.join(root, 'avd') : writable,
       aehdDir: path.join(rootWritable ? root : path.join(store.DATA_DIR, 'runtime'), 'aehd'),
+      scrcpyDir: path.join(rootWritable ? root : path.join(store.DATA_DIR, 'runtime'), 'scrcpy'),
       imagesDir: path.join(rootWritable ? root : path.join(store.DATA_DIR, 'runtime'), 'images'),
       iso: path.join(root, 'images', 'android-x86.iso'),
       disk: path.join(root, 'images', 'android.qcow2'),
@@ -319,7 +324,7 @@ class Provisioner {
    */
   async guardDisk(component, targetDir) {
     const need = {
-      adb: 64, emulator: 600, sysimg: 1800, playimg: 1800, qemu: 320, iso: 1100, aehd: 64,
+      adb: 64, emulator: 600, sysimg: 1800, playimg: 1800, qemu: 320, iso: 1100, aehd: 64, scrcpy: 64,
       // 运行时整包：1.5GB 压缩包 + 展开后 ~3.3GB 镜像，峰值同时存在
       runtime: 5000,
     }[component] || 512; // MB
@@ -1226,6 +1231,36 @@ class Provisioner {
     this._cache.accelAt = 0;
     onProgress({ stage: 'done', message: 'AEHD 驱动已就绪，需管理员权限安装', percent: 100 });
     return { ok: true, dir: p.aehdDir, installer: path.join(p.aehdDir, 'silent_install.bat') };
+  }
+
+  scrcpyExe() {
+    const dirs = [this.paths().scrcpyDir, path.join(this.paths().root, 'scrcpy')];
+    for (const dir of dirs) {
+      let names = [];
+      try { names = fs.readdirSync(dir); } catch (_) { continue; }
+      for (const n of ['.', ...names]) {
+        const exe = path.join(dir, n, 'scrcpy.exe');
+        if (fs.existsSync(exe)) return exe;
+      }
+    }
+    return '';
+  }
+
+  async installScrcpy(onProgress = () => {}) {
+    const existing = this.scrcpyExe();
+    if (existing) return { ok: true, exe: existing };
+    const p = this.ensureDirs();
+    await this.guardDisk('scrcpy', p.scrcpyDir);
+    const zip = path.join(p.tmp, 'scrcpy.zip');
+    onProgress({ stage: 'download', message: '下载 scrcpy（约 11MB）…', percent: 10 });
+    await downloadAny(this._downloadUrls(SOURCES.scrcpy.url), zip, { expectSha256: SOURCES.scrcpy.sha256 });
+    fs.mkdirSync(p.scrcpyDir, { recursive: true });
+    await this.extractZip(zip, p.scrcpyDir);
+    fs.rmSync(zip, { force: true });
+    const exe = this.scrcpyExe();
+    if (!exe) throw new Error('scrcpy 解压异常');
+    onProgress({ stage: 'done', message: 'scrcpy 已就绪', percent: 100 });
+    return { ok: true, exe };
   }
 
   // ---------------- QEMU ----------------

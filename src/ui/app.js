@@ -1042,7 +1042,7 @@ function fillSettings(s) {
   if ($('setOrientationMode')) $('setOrientationMode').value = d.orientationMode || 'auto';
   if ($('setTabletMode')) $('setTabletMode').value = d.tabletMode === false ? 'off' : 'on';
   $('setPortrait').value = d.portrait || '900x1600';
-  if ($('setWindowEmbed')) $('setWindowEmbed').value = d.windowEmbed === false ? 'detached' : 'embed';
+  if ($('setWindowEmbed')) $('setWindowEmbed').value = d.scrcpyWindows ? 'scrcpy' : (d.windowEmbed === false ? 'detached' : 'embed');
   $('portraitField').hidden = $('setDisplayMode').value === 'fullscreen';
 }
 
@@ -1511,8 +1511,13 @@ function bindSettings() {
     toast({ title: '画面大小已更新', body: '下次打开应用或切换应用时生效', type: 'ok' });
   });
   $('setWindowEmbed').addEventListener('change', async (e) => {
+    const scrcpy = e.target.value === 'scrcpy';
     const embed = e.target.value === 'embed';
-    state.settings = await api.setSettings({ display: { windowEmbed: embed } });
+    state.settings = await api.setSettings({ display: { windowEmbed: embed, scrcpyWindows: scrcpy } });
+    if (scrcpy) {
+      toast({ title: '已切到 scrcpy 模式', body: '下次打开应用时生效。每个应用一个独立窗口，可同时打开多个；首次使用会自动下载 scrcpy（约 11MB）。', type: 'ok' });
+      return;
+    }
     toast({
       title: embed ? '已切回嵌入模式' : '已切到独立窗口模式',
       body: '下次打开应用时生效。独立模式下安卓画面由模拟器自己开窗口，方向与缩放都由它处理。',
